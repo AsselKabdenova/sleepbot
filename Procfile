@@ -1,1 +1,2 @@
-worker: python3 sleepbot.py
+worker: python sleepbot.py
+
