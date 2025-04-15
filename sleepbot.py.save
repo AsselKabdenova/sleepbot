@@ -1,0 +1,84 @@
+import telebot
+from telebot import types
+from datetime import datetime, timedelta
+
+API_TOKEN = '7597043260:AAFK_OFEDx9er0YOYKVGmI9-nF7n_R3GTPk'
+bot = telebot.TeleBot(API_TOKEN)
+
+user_data = {}
+
+@bot.message_handler(commands=['start'])
+def send_welcome(message):
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add(types.KeyboardButton("Начать планирование 🧠"))
+    bot.send_message(message.chat.id, "Привет! Я помогу тебе спланировать день и сон с учётом фаз сна, хронотипа и биоритмов.", reply_markup=markup)
+
+@bot.message_handler(func=lambda message: message.text == "Начать планирование 🧠")
+def ask_lessons(message):
+    user_data[message.chat.id] = {}
+    bot.send_message(message.chat.id, "Сколько у тебя завтра пар? 📚")
+    bot.register_next_step_handler(message, ask_sleep_time)
+
+def ask_sleep_time(message):
+    user_data[message.chat.id]['lessons'] = int(message.text)
+    bot.send_message(message.chat.id, "Во сколько ты планируешь лечь спать? (например: 23:30) 😴")
+    bot.register_next_step_handler(message, ask_wake_time)
+
+def ask_wake_time(message):
+    user_data[message.chat.id]['sleep_time'] = message.text
+    bot.send_message(message.chat.id, "Во сколько ты хочешь проснуться? (например: 07:00) ⏰")
+    bot.register_next_step_handler(message, ask_rest)
+
+def ask_rest(message):
+    user_data[message.chat.id]['wake_time'] = message.text
+    bot.send_message(message.chat.id, "Сколько часов ты хочешь отдохнуть завтра (кроме сна)? 🧘‍♀️")
+    bot.register_next_step_handler(message, ask_drowsy)
+
+def ask_drowsy(message):
+    user_data[message.chat.id]['rest_hours'] = message.text
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add("Да", "Нет")
+    bot.send_message(message.chat.id, "Ты чувствуешь усталость или сонливость днём? 😪", reply_markup=markup)
+    bot.register_next_step_handler(message, ask_chronotype)
+
+def ask_chronotype(message):
+    user_data[message.chat.id]['drowsy'] = message.text
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add("Жаворонок", "Сова", "Не знаю")
+    bot.send_message(message.chat.id, "Ты больше активен утром или вечером? 🕊🦉", reply_markup=markup)
+    bot.register_next_step_handler(message, ask_schedule_type)
+
+def ask_schedule_type(message):
+    user_data[message.chat.id]['chronotype'] = message.text
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add("Строгое", "Гибкое")
+    bot.send_message(message.chat.id, "Ты предпочитаешь строгое расписание или гибкое? 📅", reply_markup=markup)
+    bot.register_next_step_handler(message, ask_adaptation)
+
+def ask_adaptation(message):
+    user_data[message.chat.id]['schedule'] = message.text
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add("Да", "Нет")
+    bot.send_message(message.chat.id, "Раньше ты жил в регионе с другим временем? (например, Алматы)? 🌍", reply_markup=markup)
+    bot.register_next_step_handler(message, generate_plan)
+
+def generate_plan(message):
+    user_data[message.chat.id]['was_in_other_region'] = message.text == "Да"
+    data = user_data[message.chat.id]
+
+    # базовый расчёт фаз сна (по 90 минут)
+    try:
+        sleep_time = datetime.strptime(data['sleep_time'], "%H:%M")
+        wake_time = datetime.strptime(data['wake_time'], "%H:%M")
+        total_sleep = (wake_time - sleep_time).seconds / 60
+        sleep_cycles = int(total_sleep // 90)
+    except:
+        sleep_cycles = "не удалось рассчитать"
+
+    adaptation_note = "(+1 час сдвиг учтён)" if data['was_in_other_region'] else ""
+
+    plan = f"\n✅ Твой персональный план:\n- Завтра пар: {data['lessons']}\n- Сон: {data['sleep_time']}–{data['wake_time']} {adaptation_note}\n- Фаз сна: {sleep_cycles} циклов\n- Отдых днём: {data['rest_hours']} ч\n- Хронотип: {data['chronotype']}\n- Расписание: {data['schedule']}\n\n💡 Если хочешь — я могу предложить оптимальные окна для сна и продуктивности."
+
+    bot.send_message(message.chat.id, plan)
+
+bot.polling(none_stop=True)
